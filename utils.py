@@ -79,7 +79,7 @@ def find_pattern_category(text):
         category = "Unknown"
     return True, category, matched_text
     
-def reformat_scraped_data(data,filename):
+def reformat_scraped_data(data:list ,filename:str):
     """
     Reformat scraped data and save it as a DataFrame and a CSV file.
 
@@ -90,29 +90,7 @@ def reformat_scraped_data(data,filename):
     Returns:
         pd.DataFrame: The reformatted data as a DataFrame.
     """
-    current_date = ''
-    current_time = ''
-    structured_rows = []
-
-    for row in data:
-        if len(row)==1 or len(row)==5:
-            match, day = contains_day_or_month(row[0])
-            if match:
-                current_date = row[0].replace(day,"").replace("\n","")
-        if len(row)==4:
-            current_time = row[0]
-
-        if len(row)==5:
-            current_time = row[1]
-        
-        if len(row)>1:
-            event = row[-1]
-            impact = row[-2]
-            currency = row[-3]
-            structured_rows.append([current_date,current_time,currency,impact,event])
-                
-
-    df = pd.DataFrame(structured_rows,columns=['date','time','currency','impact','event'])
+    df = pd.DataFrame(data)
     os.makedirs("_news_output",exist_ok=True)
     os.makedirs("_news_output/2023-01-01 to 2023-12-31_DT",exist_ok=True)
     df.to_csv(f"_news_output/2023-01-01 to 2023-12-31_DT/{filename}",index=False)

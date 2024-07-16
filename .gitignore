@@ -1,3 +1,4 @@
 *.pyc
 _news_output
 news
+env
