@@ -1,14 +1,11 @@
 try:
     from selenium import webdriver
-    from selenium.webdriver.common.by import By
     driver = webdriver.Chrome()
 except:
     print ("AF: No Chrome webdriver installed")
     driver = webdriver.Chrome(ChromeDriverManager().install())
 
 import time
-import json
-import pandas as pd
 import datetime
 from tqdm import tqdm
 from config import ALLOWED_ELEMENT_TYPES,ICON_COLOR_MAP
@@ -19,6 +16,20 @@ from bs4 import BeautifulSoup, Tag
 # Start and end dates for 2023
 start_date = datetime.date(2023, 1, 1)
 end_date = datetime.date(2023, 12, 31)
+latest_time = ''
+
+local_time = datetime.datetime.now()
+gmt_time = time.gmtime()
+local_offset = (datetime.datetime.fromtimestamp(time.mktime(local_time.timetuple())) - datetime.datetime.fromtimestamp(time.mktime(gmt_time))).total_seconds() / 3600
+
+
+def convert_to_gmt(time_str, local_offset = local_offset):
+    try:
+        local_dt = datetime.datetime.strptime(time_str, '%I:%M%p')
+        gmt_dt = local_dt - datetime.timedelta(hours=local_offset)
+        return gmt_dt.strftime('%I:%M%p')
+    except:
+        return time_str
 
 def tag_num_value(tag_txt:str):
     if isinstance(tag_txt, Tag): tag_txt = tag_txt.text
@@ -44,9 +55,8 @@ while current_date <= end_date:
     
     url = f"https://www.forexfactory.com/calendar?{formatted_range}"
     driver.get(url)
+    time.sleep(1.5)
     print(url)
-    
-
     data = []
     previous_row_count = 0
     # Scroll down to the end of the page
@@ -55,10 +65,10 @@ while current_date <= end_date:
         before_scroll = driver.execute_script("return window.pageYOffset;")
 
         # Scroll down a fixed amount
-        driver.execute_script("window.scrollTo(0, window.pageYOffset + 500);")
+        driver.execute_script("window.scrollTo(0, window.pageYOffset + 300);")
 
         # Wait for a short moment to allow content to load
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         # Record the new scroll position
         after_scroll = driver.execute_script("return window.pageYOffset;")
@@ -66,7 +76,7 @@ while current_date <= end_date:
         # If the scroll position hasn't changed, we've reached the end of the page
         if before_scroll == after_scroll:
             break
-
+    
     soup = BeautifulSoup(driver.page_source, 'html.parser')
     table = soup.find('table', class_ = "calendar__table")
     
@@ -90,10 +100,11 @@ while current_date <= end_date:
             currency = row.find("td", class_= "calendar__currency").find('span')
             desc = row.find("td", class_= "calendar__event").find('span')
             time_ = row.find("td", class_= "calendar__time")
+            if time_: latest_time = time_.text.strip()
             
             data.append({
                 "Date": date,
-                "Time": time_.text if time_ else '',
+                "Time": convert_to_gmt(latest_time).lower(),
                 "Currency": currency.text if currency else '',
                 "Impact": row.find("td", class_= "calendar__impact").find('span')['title'][0],
                 "Description": desc.text if desc else '',
