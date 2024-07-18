@@ -1,16 +1,14 @@
-try:
-    from selenium import webdriver
-    driver = webdriver.Chrome()
-except:
-    print ("AF: No Chrome webdriver installed")
-    driver = webdriver.Chrome(ChromeDriverManager().install())
+# from selenium import webdriver
+import undetected_chromedriver as uc
+driver = uc.Chrome()
 
 import time
 import datetime
 from tqdm import tqdm
-from config import ALLOWED_ELEMENT_TYPES,ICON_COLOR_MAP
 from utils import reformat_scraped_data
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup, Tag
 
 # Start and end dates for 2023
@@ -18,22 +16,31 @@ start_date = datetime.date(2023, 1, 1)
 end_date = datetime.date(2023, 12, 31)
 latest_time = ''
 
-local_time = datetime.datetime.now()
-gmt_time = time.gmtime()
-local_offset = (datetime.datetime.fromtimestamp(time.mktime(local_time.timetuple())) - datetime.datetime.fromtimestamp(time.mktime(gmt_time))).total_seconds() / 3600
+# Set timezone
+driver.get('https://www.forexfactory.com/')
+wait = WebDriverWait(driver, 10)
+a_tag = wait.until(EC.element_to_be_clickable((By.XPATH, '//a[@href="/timezone"]')))
+a_tag.click()
+timezone_select = wait.until(EC.element_to_be_clickable((By.ID, "time_zone_modal")))
+for option in timezone_select.find_elements(By.TAG_NAME, "option"):
+    if option.get_attribute("value") == "Etc/UTC":
+        option.click()
+        break
+    
+time_format_select = wait.until(EC.element_to_be_clickable((By.ID, "time_format_modal")))
+for option in time_format_select.find_elements(By.TAG_NAME, "option"):
+    if option.get_attribute("value") == "0":
+        option.click()
+        break
+    
+submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@type='submit' and @value='Save Settings']")))
+submit_button.click()
 
+################
 
-def convert_to_gmt(time_str, local_offset = local_offset):
-    try:
-        local_dt = datetime.datetime.strptime(time_str, '%I:%M%p')
-        gmt_dt = local_dt - datetime.timedelta(hours=local_offset)
-        return gmt_dt.strftime('%I:%M%p')
-    except:
-        return time_str
-
+# get numerical value to calc better/worse flag
 def tag_num_value(tag_txt:str):
     if isinstance(tag_txt, Tag): tag_txt = tag_txt.text
-    
     try:
         return float(tag_txt.rstrip('KBMT%'))
     except:
@@ -42,7 +49,6 @@ def tag_num_value(tag_txt:str):
 # Iterate over each month in 2023
 current_date = start_date
 while current_date <= end_date:
-    driver = webdriver.Chrome() # excepting bot detection
     # Get the first day of the current month
     first_day_of_month = current_date.replace(day=1)
     # Get the last day of the current month
@@ -54,25 +60,17 @@ while current_date <= end_date:
                       f"{last_day_of_month.strftime('%b').lower()}{last_day_of_month.day}.{last_day_of_month.year}"
     
     url = f"https://www.forexfactory.com/calendar?{formatted_range}"
+    time.sleep(0.5)
     driver.get(url)
-    time.sleep(1.5)
     print(url)
     data = []
     previous_row_count = 0
     # Scroll down to the end of the page
     while True:
-        # Record the current scroll position
         before_scroll = driver.execute_script("return window.pageYOffset;")
-
-        # Scroll down a fixed amount
         driver.execute_script("window.scrollTo(0, window.pageYOffset + 300);")
-
-        # Wait for a short moment to allow content to load
-        time.sleep(0.1)
-
-        # Record the new scroll position
+        time.sleep(0.25)
         after_scroll = driver.execute_script("return window.pageYOffset;")
-
         # If the scroll position hasn't changed, we've reached the end of the page
         if before_scroll == after_scroll:
             break
@@ -100,11 +98,11 @@ while current_date <= end_date:
             currency = row.find("td", class_= "calendar__currency").find('span')
             desc = row.find("td", class_= "calendar__event").find('span')
             time_ = row.find("td", class_= "calendar__time")
-            if time_: latest_time = time_.text.strip()
+            if len(time_.text.strip()): latest_time = time_.text.strip()
             
             data.append({
                 "Date": date,
-                "Time": convert_to_gmt(latest_time).lower(),
+                "Time": latest_time,
                 "Currency": currency.text if currency else '',
                 "Impact": row.find("td", class_= "calendar__impact").find('span')['title'][0],
                 "Description": desc.text if desc else '',
@@ -121,7 +119,6 @@ while current_date <= end_date:
     filename = f"{first_day_of_month.strftime('%b').lower()}_{current_utc_time:%Y-%m-%d_%H-%M-%S}_UTC.csv"
     reformat_scraped_data(data,filename)
 
-
-    # Move to the first day of the next month
     current_date = last_day_of_month + datetime.timedelta(days=1)
-    driver.close()
+    
+driver.close()
